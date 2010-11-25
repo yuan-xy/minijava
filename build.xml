@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="GB2312"?>
+
+<project name="MiniJava" default="compile" basedir=".">
+  <target name="init">
+	  <property name="javacc.home" location="F:\\mordern compiler implemetation in java\\download\\javacc\\javacc-4.0\\javacc-4.0\\bin\\lib"/>
+	  <property name="build.home" location="${basedir}/build"/>
+      <mkdir dir="${build.home}"/>
+		<path id="java.classpath">
+			<pathelement location="${basedir}"/>
+			<pathelement location="${build.home}/"/>
+			<fileset dir="${javacc.home}/" includes="*.jar"/>
+		</path>
+  </target>
+
+    <target name="compile" depends="init">
+		<jjtree 
+			target="${basedir}/minijava.jjt" 
+			outputdirectory="${build.home}"
+			javacchome="${javacc.home}" 
+		/>
+
+		<javacc 
+			target="${build.home}/minijava.jj" 
+			outputdirectory="${build.home}"
+			javacchome="${javacc.home}" 
+		/>
+
+
+    <javac srcdir="${basedir}"
+           destdir="${build.home}"
+           classpathref="java.classpath"
+           encoding="GBK"
+           debug="on"
+           optimize="off"
+           deprecation="off"
+           verbose="off"
+		   listfiles="yes"/>
+
+    <javac srcdir="${build.home}"
+           destdir="${build.home}"
+           classpathref="java.classpath"
+           encoding="GBK"
+           debug="on"
+           optimize="off"
+           deprecation="off"
+           verbose="off"
+		   listfiles="yes"/>
+  </target>
+
+ <target name="run"  depends="compile">
+       <java classname="MiniJava" dir="${build.home}" fork="true"
+		 classpathref="java.classpath">
+		 <arg value="..\Test\Factorial.java"/> 
+       </java>
+		<junit printsummary="yes" haltonfailure="no" haltonerror="no" fork="yes">
+			<classpath>
+				<path refid="java.classpath"/>
+			</classpath>
+			<formatter type="plain" usefile="true"/>
+			<test todir="${basedir}" name="SymbolTest"/>
+			<test todir="${basedir}" name="TypeTest"/>
+		</junit>
+ </target>
+
+
+ <target name="clean"  depends="init">
+  <delete>
+    <fileset dir="." includes="**/*.bak"/>
+	<fileset dir="." includes="TEST-*Test.txt"/>
+  </delete>
+    <delete dir="${build.home}"/>
+  </target>
+
+</project>

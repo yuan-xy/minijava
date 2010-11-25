@@ -1,0 +1,345 @@
+options {
+  LOOKAHEAD=3;
+  MULTI=true;
+  VISITOR=true;
+  NODE_DEFAULT_VOID=false;
+  NODE_EXTENDS="MyNode";
+  DEBUG_PARSER=false;
+  FORCE_LA_CHECK=true;
+  STATIC=false;
+}
+
+
+PARSER_BEGIN(MiniJava)
+
+import java.io.*;
+
+class MiniJava {
+  public static void main(String args[]) {
+    System.out.println("Reading from standard input...");
+    MiniJava t =null;
+    if(args.length>0){
+    	try {
+		t=new MiniJava(new FileInputStream(new File(args[0])));
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+	}
+    }else{
+    	t=new MiniJava(System.in);
+    }
+    try {
+      SimpleNode n = t.Goal();
+      SymbolTableVisitor symbolTable=new SymbolTableVisitor();
+      n.jjtAccept(symbolTable,null);
+      n.jjtAccept(new TypeCheckVisitor(symbolTable.table),null);
+      n.jjtAccept(new PrettyPrintVisitor(),null);
+      //n.dump("");
+      System.out.println("Thank you.");
+    } catch (Exception e) {
+      System.out.println("Oops.");
+      System.out.println(e.getMessage());
+      e.printStackTrace();
+    }
+  }
+}
+
+PARSER_END(MiniJava)
+
+
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+| <"//" (~["\n","\r"])* ("\n"|"\r"|"\r\n")>
+| <"/*" (~["*"])* "*" (~["/"] (~["*"])* "*")* "/">
+}
+
+TOKEN : /* LITERALS */
+{
+  < INTEGER_LITERAL:
+        <DECIMAL_LITERAL> (["l","L"])?
+      | <HEX_LITERAL> (["l","L"])?
+      | <OCTAL_LITERAL> (["l","L"])?
+  >
+|
+  < #DECIMAL_LITERAL: ["1"-"9"] (["0"-"9"])* >
+|
+  < #HEX_LITERAL: "0" ["x","X"] (["0"-"9","a"-"f","A"-"F"])+ >
+|
+  < #OCTAL_LITERAL: "0" (["0"-"7"])* >
+}
+
+
+TOKEN : /* KEYWORDS */
+{
+  < CLASS: "class" >
+|
+  < PUBLIC: "public" >
+|
+  < STATIC: "static" >
+|
+  < VOID: "void" >
+|
+  < STRING: "String" >
+|
+  < EXTENDS: "extends" >
+|
+  < INT: "int" >
+|
+  < BOOLEAN: "boolean" >
+|
+  < IF: "if" >
+|
+  < WHILE: "while" >
+|
+  < ELSE: "else" >
+|
+  < TRUE: "true" >
+|
+  < FALSE: "false" >
+|
+  < NEW: "new" >
+|
+  < THIS: "this" >
+|
+  < RETURN: "return" >
+|
+  < MAIN: "main" >
+|
+  < LENGTH: "length" >
+
+}
+
+
+TOKEN : /* IDENTIFIERS */
+{
+  < IDENTIFIER: <LETTER> (<LETTER>|<DIGIT>)* >
+|
+  < #LETTER: ["_","a"-"z","A"-"Z"] >
+|
+  < #DIGIT: ["0"-"9"] >
+}
+
+
+SimpleNode Goal() : {}
+{
+  MainClass() ( ClassDeclaration() )* 
+  { return jjtThis; }
+}
+
+
+void MainClass() : {}
+{
+  <CLASS> Identifier() "{" 
+  <PUBLIC> <STATIC> <VOID> <MAIN> "(" <STRING> "[" "]" Identifier() ")" "{"
+	Statement() "}" 
+  "}"
+}
+
+void ClassDeclaration() : {}
+{
+	<CLASS> Identifier() ( <EXTENDS> Identifier() )? "{"
+		( VarDeclaration() )* ( MethodDeclaration() )* 
+	"}"
+}
+
+void VarDeclaration() : {}
+{
+	Type() Identifier() ";"
+}
+
+void MethodDeclaration() : {}
+{
+	<PUBLIC> Type() Identifier() "(" ( Type() Identifier() ( "," Type() Identifier() )* )? ")" "{"  ( LOOKAHEAD(2) VarDeclaration() )* ( Statement() )*  ReturnExpression() ";" "}"
+}
+
+void ReturnExpression() : {}
+{
+	<RETURN> ( Expression() )?
+}
+
+void Type() : {}
+{
+LOOKAHEAD(2)
+ ( <INT> "[" "]" )	{ jjtThis.token = token; jjtThis.token.image = "int[]"; }
+ | ( <BOOLEAN> )	{ jjtThis.token = token; }
+ | ( <INT> ) 	{ jjtThis.token = token; }
+ | ( <VOID> ) 	{ jjtThis.token = token; }
+ | Identifier()
+}
+
+void Statement() #void : {}
+{
+ "{" ( Statement() )* "}" 
+ | IfStatement()
+ | WhileStatement()
+ | PrintStatement()
+ | LOOKAHEAD(2) Assignment()
+ | LOOKAHEAD(2) ArrayAssignment()
+}
+
+void Assignment() :
+{}
+{
+  Identifier() AssignmentOperator() Expression() ";" 
+}
+
+void ArrayAssignment() :
+{}
+{
+  Identifier() "[" Expression() "]" AssignmentOperator() Expression() ";" 
+}
+
+
+void AssignmentOperator() : {}
+{
+ ( "=" | "*=" | "/=" | "%=" | "+=" | "-=" | "<<=" | ">>=" | ">>>=" | "&=" | "^=" | "|=" )
+  { jjtThis.token = token; }
+}
+
+
+void IfStatement() : {}
+{
+	<IF> "(" Expression() ")" Statement()  ( LOOKAHEAD(<ELSE>) <ELSE> Statement() )?
+}
+
+void WhileStatement() : {}
+{
+	<WHILE> "(" Expression() ")" Statement() 
+}
+
+void PrintStatement() : {}
+{
+	"System.out.println" "(" Expression() ")" ";" 
+}
+
+
+
+void Expression() #void :
+{}
+{
+  RelationalExpression()
+}
+
+
+void RelationalExpression() #void :
+{}
+{
+ (
+  ArrayExpression() ( LOOKAHEAD(1) RelationalOperator() ArrayExpression() )*
+ )  #RelationalExpression(>1)
+}
+
+void RelationalOperator() : {}
+{
+	( "<" | ">" | "<=" | ">=" | "==" | "!=" )
+	{ jjtThis.token = token; }
+}
+
+
+void ArrayExpression() #void :
+{}
+{
+ (
+  CallExpression() ( LOOKAHEAD(2) "[" CallExpression() "]" )*
+ )  #ArrayExpression(>1)
+}
+
+void CallExpression() #void :
+{}
+{
+ (
+  AdditiveExpression() ( "." Identifier() "(" ExpList() ")" )*
+ )  #CallNode(>1)
+ |
+ (
+  Identifier() ( "." Identifier() "(" ExpList() ")" )+
+ )  #CallNode(>1)
+
+}
+
+void AdditiveExpression() #void :
+{}
+{
+  MultiplicativeExpression() ( ( "+" | "-" ) MultiplicativeExpression() #AddNode(2) )*
+}
+
+void MultiplicativeExpression() #void :
+{}
+{
+  UnaryExpression() ( ["*" | "/" | "%"]  UnaryExpression() #MultiNode(2) )* 
+}
+
+
+void UnaryExpression() #void : {Token t; }
+{
+ IntegerLiteral()
+ | BooleanLiteral() 
+ | LengthExpression()
+ | ThisLiteral()
+ | LOOKAHEAD(2) NewIntArrayExpression()
+ | LOOKAHEAD(2) NewClassExpression()
+ | NegtiveExpression()
+ | "(" Expression() ")" 
+}
+
+void LengthExpression() #void :{}
+{
+  LOOKAHEAD( Identifier() "." )
+  ( Identifier() ( "." <LENGTH> )+ ) #LengthNode
+  | Identifier()
+}
+
+
+void NewClassExpression() #NewClassNode :{}
+{
+  <NEW> Identifier() "(" ")"
+}
+
+
+void NewIntArrayExpression() #NewIntArrayNode :{}
+{
+  <NEW> <INT> "[" Expression() "]" 
+}
+
+void NegtiveExpression() #NegNode :{}
+{
+  "!" Expression() 
+}
+
+void ThisLiteral() #void :{}
+{
+  <THIS> #ThisNode
+}
+
+void IntegerLiteral() #void :{Token t;}
+{
+ (t=<INTEGER_LITERAL>
+    {
+       jjtThis.token = t;
+    }
+ )#IntConstNode
+}
+
+void BooleanLiteral() #void :{}
+{
+  <TRUE> #TrueNode
+|
+  <FALSE> #FalseNode
+}
+
+
+void ExpList() : {}
+{
+	( Expression() ( "," Expression() )* )?
+}
+
+
+void Identifier() : {Token t; }
+{
+	t = <IDENTIFIER> 
+	{ jjtThis.token = t; }
+}
+
